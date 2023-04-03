@@ -88,11 +88,10 @@ def update_network(policy_net, target_net, optimizer, memory, env, eps, batch_si
     loss.backward()
     optimizer.step()
 
-def train_network(num_episodes, policy_net, target_net, optimizer, memory, env, n_actions, n_states, batch_size, eps_start, eps_end, gamma, Transition):
+def train_network(num_episodes, policy_net, target_net, optimizer, memory, env, n_actions,
+                    n_states, batch_size, eps_start, eps_end, gamma, Transition):
     reward_array = np.zeros(num_episodes)
-
     itr = 0
-
     for i_episode in range(num_episodes):
         # Initialize the environment and get it's state
         s = env.reset()
@@ -103,14 +102,12 @@ def train_network(num_episodes, policy_net, target_net, optimizer, memory, env, 
             eps = eps_decay(itr,num_episodes, eps_start, eps_end)
             a = action(s, eps, n_actions, policy_net)
             s_next, r, done = env.step(a.item())
+
             r = torch.tensor([r])
-
             reward_array[i_episode] += gamma**(time)*r
-
             time += 1
 
             s_next = torch.tensor(s_next, dtype=torch.float32).unsqueeze(0)
-
 
             memory.push(s, a, s_next, r, done)
 
@@ -124,5 +121,41 @@ def train_network(num_episodes, policy_net, target_net, optimizer, memory, env, 
 
             if itr%1000 == 0:
                 target_net.load_state_dict(policy_net.state_dict())
+
+    return policy_net, reward_array
+
+def train_network_without_targ(num_episodes, policy_net, target_net, optimizer, memory, env,
+                                n_actions, n_states, batch_size, eps_start, eps_end, gamma, Transition):
+    reward_array = np.zeros(num_episodes)
+    itr = 0
+    for i_episode in range(num_episodes):
+        # Initialize the environment and get it's state
+        s = env.reset()
+        s = torch.tensor(s, dtype=torch.float32).unsqueeze(0)
+        done = False
+        time = 0
+        while not done:
+            eps = eps_decay(itr,num_episodes, eps_start, eps_end)
+            a = action(s, eps, n_actions, policy_net)
+            s_next, r, done = env.step(a.item())
+            r = torch.tensor([r])
+
+            reward_array[i_episode] += gamma**(time)*r
+            time += 1
+
+            s_next = torch.tensor(s_next, dtype=torch.float32).unsqueeze(0)
+
+            memory.push(s, a, s_next, r, done)
+
+            # Move to the next state
+            s = s_next
+
+            # Perform one step of the optimization (on the policy network)
+            update_network(policy_net, target_net, optimizer, memory, env, eps, batch_size, Transition, gamma)
+
+            itr+=1
+
+            #if itr%1000 == 0:
+            target_net.load_state_dict(policy_net.state_dict())
 
     return policy_net, reward_array
